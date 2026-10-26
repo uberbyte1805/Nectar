@@ -12,6 +12,11 @@ import { useWeather } from "./hooks/useWeather";
 import { useSettingsSync } from "./hooks/useSettingsSync";
 import { useTrailingThrottle } from "./hooks/useTrailingThrottle";
 import { useCaldav } from "./hooks/useCaldav";
+import { useWater, useShelf, useTodos, useLyrics, useNusaReminders } from "./hooks/useNusa";
+import { NotchWater } from "./components/NotchWater";
+import { NotchTodo } from "./components/NotchTodo";
+import { NotchShelf } from "./components/NotchShelf";
+import { NotchLyrics } from "./components/NotchLyrics";
 import { NotchCalendar } from "./components/NotchCalendar";
 import { NotchClock, StopwatchReadout } from "./components/NotchClock";
 import { useStopwatch } from "./hooks/useStopwatch";
@@ -617,6 +622,11 @@ function App() {
   );
   const showClockColumn = settingsTimerEnabled || settingsStopwatchEnabled;
   const productivityEnabled = settingsCalendarEnabled || showClockColumn;
+  // Nusa feature-merge toggles (lyrics / water / shelf / todo).
+  const [nusaLyricsEnabled, setNusaLyricsEnabled] = useState(() => localStorage.getItem("nectar-lyrics-enabled") === "true");
+  const [nusaWaterEnabled, setNusaWaterEnabled] = useState(() => localStorage.getItem("nectar-water-enabled") !== "false");
+  const [nusaShelfEnabled, setNusaShelfEnabled] = useState(() => localStorage.getItem("nectar-shelf-enabled") !== "false");
+  const [nusaTodoEnabled, setNusaTodoEnabled] = useState(() => localStorage.getItem("nectar-todo-enabled") !== "false");
   const [settingsMusicModeEnabled, setSettingsMusicModeEnabled] = useState(() => localStorage.getItem("nectar-music-mode-enabled") !== "false");
   const [settingsMusicCompactNotch, setSettingsMusicCompactNotch] = useState(() => localStorage.getItem("nectar-music-compact-notch") !== "false");
   const [settingsVisualizerEnabled, setSettingsVisualizerEnabled] = useState(() => localStorage.getItem("nectar-visualizer-enabled") !== "false");
@@ -665,6 +675,10 @@ function App() {
       setSettingsCompactGlowEnabled(getVal("nectar-media-compact-glow-enabled", "true") !== "false");
       setSettingsCornersEnabled(getVal("nectar-corners-enabled", "false") === "true");
       setTimeFormat24h(getVal("nectar-time-format-24h") === "true");
+      setNusaLyricsEnabled(getVal("nectar-lyrics-enabled", "false") === "true");
+      setNusaWaterEnabled(getVal("nectar-water-enabled", "true") !== "false");
+      setNusaShelfEnabled(getVal("nectar-shelf-enabled", "true") !== "false");
+      setNusaTodoEnabled(getVal("nectar-todo-enabled", "true") !== "false");
 
       const thresholdStr = getVal("nectar-low-battery-threshold", "20");
       if (thresholdStr) setLowBatteryThreshold(parseInt(thresholdStr as string));
@@ -810,6 +824,10 @@ function App() {
       },
       "nectar-show-update-indicator": (value) => setShowUpdateIndicator(String(value) === "true"),
       "nectar-time-format-24h": setTimeFormat24h,
+      "nectar-lyrics-enabled": (v) => setNusaLyricsEnabled(String(v) === "true"),
+      "nectar-water-enabled": (v) => setNusaWaterEnabled(String(v) !== "false"),
+      "nectar-shelf-enabled": (v) => setNusaShelfEnabled(String(v) !== "false"),
+      "nectar-todo-enabled": (v) => setNusaTodoEnabled(String(v) !== "false"),
     },
     [windowLabel]
   );
@@ -841,8 +859,53 @@ function App() {
     invoke("change_notch_mode", { mode: notchMode });
   }, [notchMode, windowLabel]);
 
-  const [nectarMode, setNectarMode] = useState<'music' | 'calendar' | 'command-center' | 'status'>('status');
+  const [nectarMode, setNectarMode] = useState<'music' | 'calendar' | 'command-center' | 'status' | 'water' | 'todo' | 'shelf' | 'lyrics'>('status');
   const caldav = useCaldav();
+
+  // Nusa feature-merge hooks. `mediaInfo` is defined above, so lyrics can read
+  // the current track and seek through the media session.
+  const water = useWater(nusaWaterEnabled);
+  const shelf = useShelf(nusaShelfEnabled);
+  const todos = useTodos(nusaTodoEnabled);
+  const lyrics = useLyrics(nusaLyricsEnabled);
+
+  // File shelf: accept files dropped onto the notch window (dragDropEnabled is
+  // on for the main window). Paths are handed straight to shelf_add.
+  const shelfAddRef = useRef(shelf.add);
+  shelfAddRef.current = shelf.add;
+  useEffect(() => {
+    if (!nusaShelfEnabled) return;
+    const thisWindow = getCurrentWebviewWindow();
+    const unlisten = thisWindow.onDragDropEvent((event) => {
+      if (event.payload.type === 'drop') {
+        for (const path of event.payload.paths) {
+          shelfAddRef.current(path);
+        }
+        if (event.payload.paths.length > 0) {
+          setNectarMode('shelf');
+        }
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
+  }, [nusaShelfEnabled]);
+
+  // Fetch lyrics when the active track changes.
+  useEffect(() => {
+    if (!nusaLyricsEnabled) { lyrics.clear(); return; }
+    if (mediaInfo.has_media && mediaInfo.title) {
+      lyrics.fetchFor(mediaInfo.title, mediaInfo.artist, mediaInfo.duration_ms);
+    } else {
+      lyrics.clear();
+    }
+  }, [mediaInfo.has_media, mediaInfo.title, mediaInfo.artist, mediaInfo.duration_ms, nusaLyricsEnabled]);
+
+  // Backend reminders (water interval / todo due): peek the notch + chime.
+  useNusaReminders(() => {
+    if (notchMode === 'peek') triggerEventPeek(6000);
+    if (settingsTimerSoundEnabled) playTimerChime();
+  });
 
   // Window height is now kept constant to prevent rendering layout lag and sharp corners
 
@@ -874,13 +937,20 @@ function App() {
     // Music shifts position based on playing state:
     // Playing: command-center → music → status → calendar (active, near command-center)
     // Paused:  command-center → status → music → calendar (secondary, after status)
+    // The Nusa modes (lyrics/water/shelf/todo) append after calendar.
     const musicBeforeStatus = isPlaying && mediaInfo.has_media && settingsMusicModeEnabled;
-    const modes: ('command-center' | 'status' | 'music' | 'calendar')[] = musicBeforeStatus
+    const coreModes: ('command-center' | 'status' | 'music' | 'calendar')[] = musicBeforeStatus
       ? ['command-center', 'music', 'status', 'calendar']
       : ['command-center', 'status', 'music', 'calendar'];
+    const nusaModes: ('lyrics' | 'water' | 'shelf' | 'todo')[] = ['lyrics', 'water', 'shelf', 'todo'];
+    const modes: ('command-center' | 'status' | 'music' | 'calendar' | 'lyrics' | 'water' | 'shelf' | 'todo')[] = [...coreModes, ...nusaModes];
     const availableModes = modes.filter(m => {
       if (m === 'music' && (!settingsMusicModeEnabled || !mediaInfo.has_media)) return false;
       if (m === 'calendar' && !productivityEnabled) return false;
+      if (m === 'lyrics' && (!nusaLyricsEnabled || !mediaInfo.has_media)) return false;
+      if (m === 'water' && !nusaWaterEnabled) return false;
+      if (m === 'shelf' && !nusaShelfEnabled) return false;
+      if (m === 'todo' && !nusaTodoEnabled) return false;
       return true;
     });
 
@@ -1011,6 +1081,13 @@ function App() {
       setNectarMode('status');
     }
   }, [settingsMusicModeEnabled, nectarMode]);
+
+  useEffect(() => {
+    if (nectarMode === 'lyrics' && (!nusaLyricsEnabled || !mediaInfo.has_media)) setNectarMode('status');
+    if (nectarMode === 'water' && !nusaWaterEnabled) setNectarMode('status');
+    if (nectarMode === 'shelf' && !nusaShelfEnabled) setNectarMode('status');
+    if (nectarMode === 'todo' && !nusaTodoEnabled) setNectarMode('status');
+  }, [nectarMode, nusaLyricsEnabled, nusaWaterEnabled, nusaShelfEnabled, nusaTodoEnabled, mediaInfo.has_media]);
 
   useEffect(() => {
     if (!settingsMusicCompactNotch && nectarMode === 'music' && !isHovered) {
@@ -1462,9 +1539,31 @@ function App() {
   // Music mode shows any time we have media info (playing or paused) and music mode setting is enabled
   const isMusicMode = mediaInfo.has_media && nectarMode === 'music' && settingsMusicModeEnabled;
 
+  // Nusa feature-merge modes (lyrics / water / shelf / todo).
+  const isNusaMode = nectarMode === 'lyrics' || nectarMode === 'water' || nectarMode === 'shelf' || nectarMode === 'todo';
+  const nusaModeWidth = () => {
+    switch (nectarMode) {
+      case 'lyrics': return 360;
+      case 'water': return 340;
+      case 'shelf': return 380;
+      case 'todo': return 360;
+      default: return 320;
+    }
+  };
+  const nusaModeHeight = () => {
+    switch (nectarMode) {
+      case 'lyrics': return 220;
+      case 'water': return 190;
+      case 'shelf': return 150;
+      case 'todo': return 230;
+      default: return 180;
+    }
+  };
+
   // Calculate width dynamically based on enabled features
   const getDynamicWidth = () => {
     if (isCalendarMode) return settingsCalendarEnabled && showClockColumn ? 480 : settingsCalendarEnabled ? 310 : 270;
+    if (isNusaMode && isHovered) return nusaModeWidth();
     if (nectarMode === 'command-center' && isHovered) {
       const totalWidgets = statusWidgets.left.length + statusWidgets.right.length;
       return Math.max(350, Math.min(200 + totalWidgets * 65, 460));
@@ -1495,6 +1594,7 @@ function App() {
       return isImpacted ? 28.9 : 44.2;
     }
     if (nectarMode === 'calendar') return settingsCalendarEnabled ? (caldav.connected ? 350 : 310) : 262;
+    if (isNusaMode && isHovered) return nusaModeHeight();
     if (nectarMode === 'command-center') return isHovered ? 230 : 36;
     if (nectarMode === 'status') return 36;
     if (isMusicMode && isHovered) {
@@ -2215,6 +2315,86 @@ function App() {
                         stopwatch={stopwatch}
                       />
                     )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Nusa feature-merge modes */}
+              <AnimatePresence>
+                {isHovered && nectarMode === 'lyrics' && nusaLyricsEnabled && mediaInfo.has_media && (
+                  <motion.div
+                    key="nusa-lyrics"
+                    className="nusa-mode-content"
+                    onClick={(e) => e.stopPropagation()}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.1 } }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  >
+                    <NotchLyrics
+                      result={lyrics.result}
+                      loading={lyrics.loading}
+                      positionMs={mediaInfo.position_ms ?? 0}
+                      title={mediaInfo.title}
+                      artist={mediaInfo.artist}
+                      onSeek={(ms) => invoke("media_seek", { positionMs: ms })}
+                    />
+                  </motion.div>
+                )}
+
+                {isHovered && nectarMode === 'water' && nusaWaterEnabled && (
+                  <motion.div
+                    key="nusa-water"
+                    className="nusa-mode-content"
+                    onClick={(e) => e.stopPropagation()}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.1 } }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  >
+                    <NotchWater
+                      state={water.state}
+                      onDrink={() => water.drink()}
+                      onUndo={() => water.undo()}
+                      onReset={() => water.resetToday()}
+                    />
+                  </motion.div>
+                )}
+
+                {isHovered && nectarMode === 'shelf' && nusaShelfEnabled && (
+                  <motion.div
+                    key="nusa-shelf"
+                    className="nusa-mode-content"
+                    onClick={(e) => e.stopPropagation()}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.1 } }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  >
+                    <NotchShelf
+                      items={shelf.items}
+                      onRemove={(id) => shelf.remove(id)}
+                      onReveal={(p) => shelf.reveal(p)}
+                    />
+                  </motion.div>
+                )}
+
+                {isHovered && nectarMode === 'todo' && nusaTodoEnabled && (
+                  <motion.div
+                    key="nusa-todo"
+                    className="nusa-mode-content"
+                    onClick={(e) => e.stopPropagation()}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.1 } }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  >
+                    <NotchTodo
+                      items={todos.items}
+                      onAdd={(text, dueAt) => todos.add(text, dueAt)}
+                      onToggle={(id) => todos.toggle(id)}
+                      onRemove={(id) => todos.remove(id)}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>

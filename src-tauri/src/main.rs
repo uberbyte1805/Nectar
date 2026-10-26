@@ -16,6 +16,7 @@ mod caldav;
 mod calendar_sync;
 mod ics;
 mod active_look;
+mod features;
 
 use tauri::Manager;
 use windows::Win32::System::Console::SetConsoleCtrlHandler;
@@ -188,7 +189,20 @@ fn main() {
             calendar_sync::caldav_get_cache,
             ics::ics_add_link,
             ics::ics_remove_link,
-            ics::ics_detect
+            ics::ics_detect,
+            features::water_state,
+            features::water_drink,
+            features::water_undo,
+            features::water_reset_today,
+            features::shelf_list,
+            features::shelf_add,
+            features::shelf_remove,
+            features::shelf_reveal,
+            features::todo_list,
+            features::todo_add,
+            features::todo_toggle,
+            features::todo_remove,
+            features::lyrics_get
         ])
         .setup(|app| {
             init_taskbar_marker(app.handle());
@@ -220,6 +234,10 @@ fn main() {
             }
 
             crate::calendar_sync::start_background_sync(app.handle().clone());
+
+            // Nusa feature merge: load data.json + start the reminder scheduler.
+            crate::features::init_data_store(app.handle());
+            crate::features::start_reminder_scheduler(app.handle().clone());
 
             let window = app.get_webview_window("main").unwrap();
             let dock_win = app.get_webview_window("dock").unwrap();

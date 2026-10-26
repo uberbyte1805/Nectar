@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Effect, EffectState } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Settings, Palette, PanelTop, Monitor, Layers, Info } from "lucide-react";
+import { Settings, Palette, PanelTop, Monitor, Layers, Info, Droplets } from "lucide-react";
 import { WindowControls } from "./components/WindowControls";
 import {
   useSettings,
@@ -15,6 +15,7 @@ import {
   DockTab,
   OverlaysTab,
   AboutTab,
+  NusaTab,
 } from "./settings/index";
 import type { SettingsTab } from "./settings/index";
 import { initTheme } from "./theme";
@@ -28,6 +29,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Settings }[] = [
   { id: "notch", label: "Notch", icon: PanelTop },
   { id: "dock", label: "Dock", icon: Monitor },
   { id: "overlays", label: "Overlays", icon: Layers },
+  { id: "nusa", label: "Nusa", icon: Droplets },
   { id: "about", label: "About", icon: Info },
 ];
 
@@ -214,6 +216,30 @@ function SettingsApp() {
               toggleBrightnessOverlay={settings.toggleBrightnessOverlay}
               brightnessEdgeEnabled={settings.brightnessEdgeEnabled}
               toggleBrightnessEdge={settings.toggleBrightnessEdge}
+            />
+          )}
+          {activeTab === "nusa" && (
+            <NusaTab
+              nusaLyricsEnabled={settings.nusaLyricsEnabled}
+              toggleNusaLyrics={settings.toggleNusaLyrics}
+              nusaWaterEnabled={settings.nusaWaterEnabled}
+              toggleNusaWater={settings.toggleNusaWater}
+              nusaShelfEnabled={settings.nusaShelfEnabled}
+              toggleNusaShelf={settings.toggleNusaShelf}
+              nusaTodoEnabled={settings.nusaTodoEnabled}
+              toggleNusaTodo={settings.toggleNusaTodo}
+              waterGoalMl={settings.waterGoalMl}
+              handleWaterGoalChange={settings.handleWaterGoalChange}
+              waterIncrementMl={settings.waterIncrementMl}
+              handleWaterIncrementChange={settings.handleWaterIncrementChange}
+              waterIntervalMin={settings.waterIntervalMin}
+              handleWaterIntervalChange={settings.handleWaterIntervalChange}
+              waterAwakeStart={settings.waterAwakeStart}
+              handleWaterAwakeStartChange={settings.handleWaterAwakeStartChange}
+              waterAwakeEnd={settings.waterAwakeEnd}
+              handleWaterAwakeEndChange={settings.handleWaterAwakeEndChange}
+              shelfMaxItems={settings.shelfMaxItems}
+              handleShelfMaxChange={settings.handleShelfMaxChange}
             />
           )}
           {activeTab === "about" && (

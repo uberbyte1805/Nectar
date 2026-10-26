@@ -100,6 +100,18 @@ export function useSettings() {
   const [notchModeByMonitor, setNotchModeByMonitor] = useState<Record<string, string>>({});
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [lowBatteryThreshold, setLowBatteryThreshold] = useState(20);
+
+  // Nusa feature-merge settings (lyrics / water / shelf / todo).
+  const [nusaLyricsEnabled, setNusaLyricsEnabled] = useState(false);
+  const [nusaWaterEnabled, setNusaWaterEnabled] = useState(true);
+  const [nusaShelfEnabled, setNusaShelfEnabled] = useState(true);
+  const [nusaTodoEnabled, setNusaTodoEnabled] = useState(true);
+  const [waterGoalMl, setWaterGoalMl] = useState(1500);
+  const [waterIncrementMl, setWaterIncrementMl] = useState(250);
+  const [waterIntervalMin, setWaterIntervalMin] = useState(60);
+  const [waterAwakeStart, setWaterAwakeStart] = useState("09:00");
+  const [waterAwakeEnd, setWaterAwakeEnd] = useState("21:00");
+  const [shelfMaxItems, setShelfMaxItems] = useState(12);
   const [hasBattery, setHasBattery] = useState(true);
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "available" | "uptodate" | "error" | "downloading" | "installing"
@@ -180,6 +192,17 @@ export function useSettings() {
       apply(getVal("nectar-temp-unit"), setTempUnitFahrenheit, (v) => v === "fahrenheit");
       apply(getVal("nectar-scale"), setScale, parseFloat);
       apply(getVal("nectar-low-battery-threshold"), setLowBatteryThreshold, parseInt);
+
+      apply(getVal("nectar-lyrics-enabled"), setNusaLyricsEnabled, readBool);
+      apply(getVal("nectar-water-enabled"), setNusaWaterEnabled, readBool);
+      apply(getVal("nectar-shelf-enabled"), setNusaShelfEnabled, readBool);
+      apply(getVal("nectar-todo-enabled"), setNusaTodoEnabled, readBool);
+      apply(getVal("nectar-water-goal-ml"), setWaterGoalMl, parseInt);
+      apply(getVal("nectar-water-increment-ml"), setWaterIncrementMl, parseInt);
+      apply(getVal("nectar-water-interval-min"), setWaterIntervalMin, parseInt);
+      apply(getVal("nectar-water-awake-start"), setWaterAwakeStart, (v) => v);
+      apply(getVal("nectar-water-awake-end"), setWaterAwakeEnd, (v) => v);
+      apply(getVal("nectar-shelf-max-items"), setShelfMaxItems, parseInt);
 
       apply(getVal("nectar-notch-mode"), setNotchMode, (v) => (v === "auto-hide" ? "smart" : v));
       apply(getVal("nectar-dock-mode"), setDockMode, (v) => (v === "auto-hide" ? "smart" : v));
@@ -442,6 +465,61 @@ export function useSettings() {
     const next = !stopwatchEnabled;
     setStopwatchEnabled(next);
     saveSetting("nectar-stopwatch-enabled", String(next));
+  };
+
+  // ── Nusa feature-merge toggles (lyrics / water / shelf / todo) ──
+  const toggleNusaLyrics = () => {
+    const next = !nusaLyricsEnabled;
+    setNusaLyricsEnabled(next);
+    saveSetting("nectar-lyrics-enabled", String(next));
+  };
+
+  const toggleNusaWater = () => {
+    const next = !nusaWaterEnabled;
+    setNusaWaterEnabled(next);
+    saveSetting("nectar-water-enabled", String(next));
+  };
+
+  const toggleNusaShelf = () => {
+    const next = !nusaShelfEnabled;
+    setNusaShelfEnabled(next);
+    saveSetting("nectar-shelf-enabled", String(next));
+  };
+
+  const toggleNusaTodo = () => {
+    const next = !nusaTodoEnabled;
+    setNusaTodoEnabled(next);
+    saveSetting("nectar-todo-enabled", String(next));
+  };
+
+  const handleWaterGoalChange = (val: number) => {
+    setWaterGoalMl(val);
+    saveSetting("nectar-water-goal-ml", val.toString());
+  };
+
+  const handleWaterIncrementChange = (val: number) => {
+    setWaterIncrementMl(val);
+    saveSetting("nectar-water-increment-ml", val.toString());
+  };
+
+  const handleWaterIntervalChange = (val: number) => {
+    setWaterIntervalMin(val);
+    saveSetting("nectar-water-interval-min", val.toString());
+  };
+
+  const handleWaterAwakeStartChange = (val: string) => {
+    setWaterAwakeStart(val);
+    saveSetting("nectar-water-awake-start", val);
+  };
+
+  const handleWaterAwakeEndChange = (val: string) => {
+    setWaterAwakeEnd(val);
+    saveSetting("nectar-water-awake-end", val);
+  };
+
+  const handleShelfMaxChange = (val: number) => {
+    setShelfMaxItems(val);
+    saveSetting("nectar-shelf-max-items", val.toString());
   };
 
   const toggleMusicMode = () => {
@@ -839,6 +917,28 @@ export function useSettings() {
     handleScaleChange,
     cornersEnabled,
     toggleCorners,
+
+    // Nusa feature merge (lyrics / water / shelf / todo)
+    nusaLyricsEnabled,
+    toggleNusaLyrics,
+    nusaWaterEnabled,
+    toggleNusaWater,
+    nusaShelfEnabled,
+    toggleNusaShelf,
+    nusaTodoEnabled,
+    toggleNusaTodo,
+    waterGoalMl,
+    handleWaterGoalChange,
+    waterIncrementMl,
+    handleWaterIncrementChange,
+    waterIntervalMin,
+    handleWaterIntervalChange,
+    waterAwakeStart,
+    handleWaterAwakeStartChange,
+    waterAwakeEnd,
+    handleWaterAwakeEndChange,
+    shelfMaxItems,
+    handleShelfMaxChange,
 
     // Theme
     themeMode,

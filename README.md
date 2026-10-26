@@ -11,6 +11,8 @@
 
 **A notch and a dock for Windows: physics-animated, reactive, and built to replace your taskbar.**
 
+*This fork adds four productivity features inspired by [Nusa](https://github.com/rama2555/nusa): synced lyrics, a water reminder, a file shelf, and a to-do list with reminders.*
+
 <br />
 
 [![Latest release](https://shieldcn.dev/github/release/kua8/Nectar.svg?logo=lu:Tag)](https://github.com/kua8/Nectar/releases/latest)
@@ -54,6 +56,12 @@ A notch at the top of your screen that adapts to what you're doing. Scroll or sw
 | **Command Center** | Wi-Fi, Bluetooth, Do Not Disturb, volume, and brightness without opening Windows Settings. |
 | **Status** | Battery (hidden automatically on desktops without one) and weather, in a layout you choose. |
 | **Calendar** | A month view with a built-in Pomodoro timer. |
+| **Lyrics** | Synced lyrics for the playing track, timed to playback and sourced from LRCLIB. |
+| **Water** | A hydration ring with a 7-day chart, streaks, and timed reminders. |
+| **Shelf** | A quick-access shelf of pinned files — drag files onto the notch to pin them. |
+| **To-do** | A task list with optional due times that raise a reminder when they come due. |
+
+The four Nusa-inspired modes appear at the end of the scroll cycle and can each be turned off in **Settings › Nusa**.
 
 Width, height, corner radius, and position each animate on their own spring, so every transition feels physical.
 
@@ -66,6 +74,30 @@ Width, height, corner radius, and position each animate on their own spring, so 
 | **Peek** | Hidden until the cursor reaches the top edge, or a media event or notification arrives. |
 
 In Smart and Peek the notch stays fully clickable when it's revealed. Only a thin strip at the very edge of the screen stays click-through, so it never swallows input meant for a screenshot tool or a game. The notch never reserves desktop space, so it can't leave a gap above maximized windows.
+
+## Nusa features
+
+Four modes inspired by [Nusa](https://github.com/rama2555/nusa), living in the same notch. Each has its own toggle in **Settings › Nusa**.
+
+### Synced lyrics
+
+Play anything and the **Lyrics** mode shows the words, highlighted line by line in time with playback. Lyrics come from the free [LRCLIB](https://lrclib.net) API and are cached per track, so repeats load instantly. If a track has no timed lyrics, the mode falls back to plain text, and if it has none at all it says so — it never interrupts playback or shows an error. Click any line to seek the track there.
+
+### Water reminder
+
+The **Water** mode tracks how much you've drunk today against a goal, with a ring, a 7-day bar chart, and a streak counter. Drink entries live in `data.json` next to `settings.json`, so they survive restarts.
+
+Reminders fire on an interval you set, but only inside an awake window (default 09:00–21:00) and only while today's total is still short of the goal — once you hit it, the reminders stop for the day. Missed intervals are simply skipped; there is no catch-up pile.
+
+### File shelf
+
+Drag any file onto the notch and it lands on the **Shelf** — a row of pinned shortcuts you can reach without digging through folders. Double-click a chip to reveal the file in Explorer. The shelf is capped (12 by default, configurable) and deduplicates by path, and a chip greys out if the file has since been moved or deleted.
+
+### To-do & reminders
+
+The **To-do** mode is a quick list you can add to without leaving whatever you're doing. Each task can carry a due time; when it passes, Nectar peeks the notch and plays the timer chime (if the timer sound is on). Completed tasks are kept in a collapsed section until you clear them.
+
+Reminders are driven by a scheduler in the Rust backend and only fire while Nectar is running — the app doesn't schedule anything with Windows itself.
 
 ## The Dock
 
