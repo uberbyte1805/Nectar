@@ -63,6 +63,12 @@ A notch at the top of your screen that adapts to what you're doing. Scroll or sw
 
 The four Nusa-inspired modes appear at the end of the scroll cycle and can each be turned off in **Settings › Nusa**.
 
+### Navigating modes
+
+Hover the notch and a tab bar appears above the content: one icon per available mode, with the active one highlighted. Modes that can't apply right now (no media, feature switched off) simply drop out of the row, so the icons always work. Click an icon to jump there, use the `‹ n/N ›` pill's arrows to step through in order, or keep scrolling — the wheel still cycles modes exactly as before.
+
+While the notch is idle it shows a battery readout on the left, the clock in the center, and a small robot mascot on the right. The bot just bobs along and blinks; click it and it jumps.
+
 Width, height, corner radius, and position each animate on their own spring, so every transition feels physical.
 
 **Visibility modes** (Settings › Notch):

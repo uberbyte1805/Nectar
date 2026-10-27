@@ -1,5 +1,5 @@
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
-import { useEffect, useState, useCallback, useRef, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -17,6 +17,7 @@ import { NotchWater } from "./components/NotchWater";
 import { NotchTodo } from "./components/NotchTodo";
 import { NotchShelf } from "./components/NotchShelf";
 import { NotchLyrics } from "./components/NotchLyrics";
+import { NotchBot } from "./components/NotchBot";
 import { NotchCalendar } from "./components/NotchCalendar";
 import { NotchClock, StopwatchReadout } from "./components/NotchClock";
 import { useStopwatch } from "./hooks/useStopwatch";
@@ -26,7 +27,18 @@ import {
   MemoryStick,
   HardDrive,
   ArrowUpDown,
+  Gauge,
+  Activity,
+  Music,
+  CalendarDays,
+  AudioLines,
+  Droplets,
+  FolderOpen,
+  ListTodo,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // Timer chime, synthesized with Web Audio so there's no asset. The context is made on the
 // Start click so autoplay lets it play when the timer ends.
@@ -303,6 +315,23 @@ const TitleMarquee = ({ title }: { title: string }) => {
 
 
 
+
+export type NectarMode = 'music' | 'calendar' | 'command-center' | 'status' | 'water' | 'todo' | 'shelf' | 'lyrics';
+
+// Icon + label for each notch mode, used by the hover tab bar.
+const MODE_TAB_META: Record<NectarMode, { icon: LucideIcon; label: string }> = {
+  'command-center': { icon: Gauge, label: 'Command Center' },
+  status: { icon: Activity, label: 'Status' },
+  music: { icon: Music, label: 'Music' },
+  calendar: { icon: CalendarDays, label: 'Calendar' },
+  lyrics: { icon: AudioLines, label: 'Lyrics' },
+  water: { icon: Droplets, label: 'Water' },
+  shelf: { icon: FolderOpen, label: 'Shelf' },
+  todo: { icon: ListTodo, label: 'To-Do' },
+};
+
+// Height reserved for the hover tab bar row; added on top of every expanded height.
+const TAB_BAR_H = 30;
 
 function App() {
   useEffect(() => {
@@ -859,7 +888,7 @@ function App() {
     invoke("change_notch_mode", { mode: notchMode });
   }, [notchMode, windowLabel]);
 
-  const [nectarMode, setNectarMode] = useState<'music' | 'calendar' | 'command-center' | 'status' | 'water' | 'todo' | 'shelf' | 'lyrics'>('status');
+  const [nectarMode, setNectarMode] = useState<NectarMode>('status');
   const caldav = useCaldav();
 
   // Nusa feature-merge hooks. `mediaInfo` is defined above, so lyrics can read
@@ -914,6 +943,47 @@ function App() {
   const WHEEL_STEP_THRESHOLD = 60;
   const WHEEL_IDLE_RESET_MS = 180;
 
+  // Shared list of modes currently reachable, used by both the wheel scroll
+  // handler and the hover tab bar / pager pill.
+  // Music shifts position based on playing state:
+  // Playing: command-center → music → status → calendar (active, near command-center)
+  // Paused:  command-center → status → music → calendar (secondary, after status)
+  // The Nusa modes (lyrics/water/shelf/todo) append after calendar.
+  const availableModes = useMemo<NectarMode[]>(() => {
+    const musicBeforeStatus = isPlaying && mediaInfo.has_media && settingsMusicModeEnabled;
+    const coreModes: NectarMode[] = musicBeforeStatus
+      ? ['command-center', 'music', 'status', 'calendar']
+      : ['command-center', 'status', 'music', 'calendar'];
+    const nusaModes: NectarMode[] = ['lyrics', 'water', 'shelf', 'todo'];
+    const modes: NectarMode[] = [...coreModes, ...nusaModes];
+    return modes.filter(m => {
+      if (m === 'music' && (!settingsMusicModeEnabled || !mediaInfo.has_media)) return false;
+      if (m === 'calendar' && !productivityEnabled) return false;
+      if (m === 'lyrics' && (!nusaLyricsEnabled || !mediaInfo.has_media)) return false;
+      if (m === 'water' && !nusaWaterEnabled) return false;
+      if (m === 'shelf' && !nusaShelfEnabled) return false;
+      if (m === 'todo' && !nusaTodoEnabled) return false;
+      return true;
+    });
+  }, [isPlaying, mediaInfo.has_media, settingsMusicModeEnabled, productivityEnabled, nusaLyricsEnabled, nusaWaterEnabled, nusaShelfEnabled, nusaTodoEnabled]);
+
+  // Programmatic mode switch (used by tab bar + pager pill).
+  const switchToMode = (mode: NectarMode) => {
+    manualMusicRef.current = mode === 'music';
+    setNectarMode(mode);
+  };
+
+  const modeStep = (direction: 1 | -1) => {
+    if (availableModes.length === 0) return;
+    const currentIndex = availableModes.indexOf(nectarMode);
+    if (currentIndex === -1) {
+      switchToMode(availableModes[0]);
+      return;
+    }
+    const nextIndex = (currentIndex + direction + availableModes.length) % availableModes.length;
+    switchToMode(availableModes[nextIndex]);
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('.calendar-grid') || target.closest('.timer-column') || target.closest('.cal-scroll')) {
@@ -934,26 +1004,7 @@ function App() {
     const direction = wheelAccumRef.current > 0 ? 1 : -1;
     wheelAccumRef.current = 0;
 
-    // Music shifts position based on playing state:
-    // Playing: command-center → music → status → calendar (active, near command-center)
-    // Paused:  command-center → status → music → calendar (secondary, after status)
-    // The Nusa modes (lyrics/water/shelf/todo) append after calendar.
-    const musicBeforeStatus = isPlaying && mediaInfo.has_media && settingsMusicModeEnabled;
-    const coreModes: ('command-center' | 'status' | 'music' | 'calendar')[] = musicBeforeStatus
-      ? ['command-center', 'music', 'status', 'calendar']
-      : ['command-center', 'status', 'music', 'calendar'];
-    const nusaModes: ('lyrics' | 'water' | 'shelf' | 'todo')[] = ['lyrics', 'water', 'shelf', 'todo'];
-    const modes: ('command-center' | 'status' | 'music' | 'calendar' | 'lyrics' | 'water' | 'shelf' | 'todo')[] = [...coreModes, ...nusaModes];
-    const availableModes = modes.filter(m => {
-      if (m === 'music' && (!settingsMusicModeEnabled || !mediaInfo.has_media)) return false;
-      if (m === 'calendar' && !productivityEnabled) return false;
-      if (m === 'lyrics' && (!nusaLyricsEnabled || !mediaInfo.has_media)) return false;
-      if (m === 'water' && !nusaWaterEnabled) return false;
-      if (m === 'shelf' && !nusaShelfEnabled) return false;
-      if (m === 'todo' && !nusaTodoEnabled) return false;
-      return true;
-    });
-
+    // Music shifts position based on playing state (see availableModes memo above).
     const currentIndex = availableModes.indexOf(nectarMode);
     if (currentIndex === -1) return;
 
@@ -1562,7 +1613,7 @@ function App() {
 
   // Calculate width dynamically based on enabled features
   const getDynamicWidth = () => {
-    if (isCalendarMode) return settingsCalendarEnabled && showClockColumn ? 480 : settingsCalendarEnabled ? 310 : 270;
+    if (isCalendarMode) return settingsCalendarEnabled && showClockColumn ? 480 : settingsCalendarEnabled ? 310 : 330;
     if (isNusaMode && isHovered) return nusaModeWidth();
     if (nectarMode === 'command-center' && isHovered) {
       const totalWidgets = statusWidgets.left.length + statusWidgets.right.length;
@@ -1570,20 +1621,16 @@ function App() {
     }
     if (nectarMode === 'status' && isHovered) {
       const totalWidgets = statusWidgets.left.length + statusWidgets.right.length;
-      return Math.min(200 + totalWidgets * 65, 460);
+      return Math.max(330, Math.min(200 + totalWidgets * 65, 460));
     }
-    if (isMusicMode && isHovered) return mediaLayout === 'compact' ? 300 : 340;
+    if (isMusicMode && isHovered) return mediaLayout === 'compact' ? 320 : 340;
     if ((showPowerPulse || showLowBatteryPulse || showUpdatePulse) && !isHovered) return 200;
 
-    let w = 140;
+    // Idle row is now battery (left) + clock (center) + bot (right).
+    let w = isMusicMode ? 140 : 180;
     if (isMusicMode) {
-      w = 140;
       if (settingsVisualizerEnabled && isPlaying) w += 30;
       if (settingsAlbumArtEnabled) w += 30;
-
-      if (isHovered) {
-        w += 60;
-      }
     }
 
     return w;
@@ -1593,17 +1640,19 @@ function App() {
     if (!isExpanded || isHidden) {
       return isImpacted ? 28.9 : 44.2;
     }
-    if (nectarMode === 'calendar') return settingsCalendarEnabled ? (caldav.connected ? 350 : 310) : 262;
-    if (isNusaMode && isHovered) return nusaModeHeight();
-    if (nectarMode === 'command-center') return isHovered ? 230 : 36;
-    if (nectarMode === 'status') return 36;
+    // The hover tab bar takes TAB_BAR_H at the top of the expanded panel.
+    const withTabBar = (h: number) => (isHovered ? h + TAB_BAR_H : h);
+    if (nectarMode === 'calendar') return withTabBar(settingsCalendarEnabled ? (caldav.connected ? 350 : 310) : 262);
+    if (isNusaMode && isHovered) return withTabBar(nusaModeHeight());
+    if (nectarMode === 'command-center') return isHovered ? withTabBar(230) : 36;
+    if (nectarMode === 'status') return withTabBar(36);
     if (isMusicMode && isHovered) {
       const hasProgressBar = (mediaInfo.duration_ms ?? 0) > 0;
       let h = mediaLayout === 'compact' ? (hasProgressBar ? 132 : 116) : 120;
       if (mediaLayout === 'compact') {
         if (compactVolumeExpanded) h += 36;
       }
-      return h;
+      return withTabBar(h);
     }
     return 36;
   };
@@ -1728,6 +1777,61 @@ function App() {
               transition={{ duration: 0.1 }}
               style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', borderRadius: 'inherit' }}
             >
+              {/* Hover tab bar: icon tabs + pager pill */}
+              <AnimatePresence>
+                {isHovered && availableModes.length > 0 && (
+                  <motion.div
+                    key="notch-tab-bar"
+                    className="notch-tab-bar"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.18 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="notch-tab-icons">
+                      {availableModes.map((m) => {
+                        const meta = MODE_TAB_META[m];
+                        const Icon = meta.icon;
+                        return (
+                          <button
+                            key={m}
+                            className={`notch-tab${nectarMode === m ? " active" : ""}`}
+                            title={meta.label}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              switchToMode(m);
+                            }}
+                          >
+                            <Icon size={13} strokeWidth={2} />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="notch-pager">
+                      <button
+                        className="notch-pager-arrow"
+                        aria-label="Previous mode"
+                        onClick={(e) => { e.stopPropagation(); modeStep(-1); }}
+                      >
+                        <ChevronLeft size={11} strokeWidth={2.5} />
+                      </button>
+                      <span className="notch-pager-count">
+                        {Math.max(availableModes.indexOf(nectarMode), 0) + 1}/{availableModes.length}
+                      </span>
+                      <button
+                        className="notch-pager-arrow"
+                        aria-label="Next mode"
+                        onClick={(e) => { e.stopPropagation(); modeStep(1); }}
+                      >
+                        <ChevronRight size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Faster Waiting Transition Area */}
               <AnimatePresence mode="wait">
                 {isHovered && isMusicMode && !isCalendarMode ? (
@@ -1991,6 +2095,18 @@ function App() {
                                 >
                                   {statusWidgets.left.map(renderStatusWidget)}
                                 </motion.div>
+                              ) : (!isMusicMode && !isHovered) ? (
+                                <motion.div
+                                  key="idle-battery"
+                                  className="idle-battery"
+                                  initial={{ opacity: 0, x: -4 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -4 }}
+                                  transition={{ duration: 0.2 }}
+                                >
+                                  <BatteryIcon charging={isCharging} level={batteryLevel} threshold={lowBatteryThreshold} />
+                                  <span className="idle-battery-pct">{batteryLevel}%</span>
+                                </motion.div>
                               ) : null}
                             </div>
 
@@ -2109,6 +2225,17 @@ function App() {
                                   transition={{ duration: 0.2 }}
                                 >
                                   {statusWidgets.right.map(renderStatusWidget)}
+                                </motion.div>
+                              ) : (!isMusicMode && !isHovered) ? (
+                                <motion.div
+                                  key="idle-bot"
+                                  className="idle-bot"
+                                  initial={{ opacity: 0, x: 4 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: 4 }}
+                                  transition={{ duration: 0.2 }}
+                                >
+                                  <NotchBot size={20} />
                                 </motion.div>
                               ) : null}
                             </div>
