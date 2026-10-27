@@ -1616,7 +1616,7 @@ function App() {
     if ((showPowerPulse || showLowBatteryPulse || showUpdatePulse) && !isHovered) return 200;
 
     // Standby: weather + clock+date + battery needs room so nothing overlaps.
-    let w = isMusicMode ? 140 : 252;
+    let w = isMusicMode ? 140 : 296;
     if (isMusicMode) {
       if (settingsVisualizerEnabled && isPlaying) w += 30;
       if (settingsAlbumArtEnabled) w += 30;
