@@ -342,7 +342,7 @@ function App() {
   const [isPinned, setIsPinned] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [scale, setScale] = useState(() => parseFloat(localStorage.getItem("nectar-scale") || "1.0"));
-  const [timeFormat24h, setTimeFormat24h] = useState(() => localStorage.getItem("nectar-time-format-24h") === "true");
+  const [timeFormat24h, setTimeFormat24h] = useState(() => localStorage.getItem("nectar-time-format-24h") !== "false");
 
 
   const [batteryLevel, setBatteryLevel] = useState(100);
@@ -703,7 +703,7 @@ function App() {
       setSettingsAmbienceEnabled(getVal("nectar-media-ambience-enabled", "true") !== "false");
       setSettingsCompactGlowEnabled(getVal("nectar-media-compact-glow-enabled", "true") !== "false");
       setSettingsCornersEnabled(getVal("nectar-corners-enabled", "false") === "true");
-      setTimeFormat24h(getVal("nectar-time-format-24h") === "true");
+      setTimeFormat24h(getVal("nectar-time-format-24h", "true") !== "false");
       setNusaLyricsEnabled(getVal("nectar-lyrics-enabled", "false") === "true");
       setNusaWaterEnabled(getVal("nectar-water-enabled", "true") !== "false");
       setNusaShelfEnabled(getVal("nectar-shelf-enabled", "true") !== "false");

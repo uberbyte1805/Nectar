@@ -84,7 +84,7 @@ function CalendarWindow() {
   const [hidden, setHidden] = useState<Set<string>>(readHidden);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const hour12 = localStorage.getItem("nectar-time-format-24h") !== "true";
+  const hour12 = localStorage.getItem("nectar-time-format-24h") === "false";
 
   useEffect(() => initTheme(), []);
 

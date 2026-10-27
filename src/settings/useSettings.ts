@@ -48,7 +48,7 @@ export function useSettings() {
     () => localStorage.getItem("nectar-show-update-indicator") !== "false"
   );
   const [timeFormat24h, setTimeFormat24h] = useState(
-    () => localStorage.getItem("nectar-time-format-24h") === "true"
+    () => localStorage.getItem("nectar-time-format-24h") !== "false"
   );
   const [tempUnitFahrenheit, setTempUnitFahrenheit] = useState(false);
   const [cityName, setCityName] = useState("");
