@@ -242,6 +242,19 @@ img {
 
 .time-center {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.time-date {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    opacity: 0.55;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .time-flip-container {
@@ -1522,7 +1535,7 @@ img {
 
 .calendar-timer-content {
     position: absolute;
-    top: 66px;
+    top: 36px;
     left: 0;
     width: 100%;
     height: calc(100% - 66px);
@@ -1533,7 +1546,7 @@ img {
 /* Command Center Panel - Minimal */
 .command-center-content-minimal {
     position: absolute;
-    top: 66px;
+    top: 36px;
     left: 0;
     width: 100%;
     height: calc(100% - 66px);
@@ -2273,7 +2286,7 @@ img {
 
 .nusa-mode-content {
     position: absolute;
-    top: 66px;
+    top: 36px;
     left: 0;
     width: 100%;
     height: calc(100% - 66px);
@@ -2441,6 +2454,7 @@ img {
     padding: 0 8px;
     box-sizing: border-box;
     position: relative;
+    border-top: 1px solid color-mix(in srgb, var(--nectar-text, white) 10%, transparent);
 }
 
 .notch-tab-icons {
@@ -2532,7 +2546,7 @@ img {
     font-variant-numeric: tabular-nums;
 }
 
-/* ── Idle row: battery (left) + clock (center) + bot (right) ── */
+/* ── Idle row: weather (left) + clock+date (center) + battery (right) ── */
 .idle-battery {
     display: flex;
     align-items: center;
@@ -2548,11 +2562,42 @@ img {
     font-variant-numeric: tabular-nums;
 }
 
-.idle-bot {
+.idle-weather {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--nectar-text, white);
+    opacity: 0.85;
+}
+
+.idle-weather-temp {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Detail tier: CPU / RAM / Disk strip shown on hover ── */
+.resource-strip {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 18px;
+    padding: 8px 14px 10px;
+    box-sizing: border-box;
     color: var(--nectar-text, white);
+}
+
+.resource-strip .passive-feature {
+    gap: 4px;
+}
+
+.resource-strip .passive-feature .label {
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ── NotchBot mascot ── */

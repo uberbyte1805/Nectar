@@ -17,7 +17,6 @@ import { NotchWater } from "./components/NotchWater";
 import { NotchTodo } from "./components/NotchTodo";
 import { NotchShelf } from "./components/NotchShelf";
 import { NotchLyrics } from "./components/NotchLyrics";
-import { NotchBot } from "./components/NotchBot";
 import { NotchCalendar } from "./components/NotchCalendar";
 import { NotchClock, StopwatchReadout } from "./components/NotchClock";
 import { useStopwatch } from "./hooks/useStopwatch";
@@ -330,16 +329,17 @@ const MODE_TAB_META: Record<NectarMode, { icon: LucideIcon; label: string }> = {
   todo: { icon: ListTodo, label: 'To-Do' },
 };
 
-// Height reserved for the hover tab bar row; added on top of every expanded height.
-const TAB_BAR_H = 30;
-
 function App() {
   useEffect(() => {
     return initTheme();
   }, []);
 
   const [time, setTime] = useState("");
+  const [shortDate, setShortDate] = useState("");
   const [isHovered, setIsHovered] = useState(false);
+  // Pinned = user clicked the notch, locking it into the full panel (440x260
+  // with the tab bar). Cleared whenever the pointer leaves.
+  const [isPinned, setIsPinned] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [scale, setScale] = useState(() => parseFloat(localStorage.getItem("nectar-scale") || "1.0"));
   const [timeFormat24h, setTimeFormat24h] = useState(() => localStorage.getItem("nectar-time-format-24h") === "true");
@@ -1163,6 +1163,9 @@ function App() {
           hour12: !timeFormat24h,
         })
       );
+      setShortDate(
+        now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
+      );
     };
 
     updateTime();
@@ -1520,13 +1523,15 @@ function App() {
     }
     if (!productivityEnabled) return;
 
-    setNectarMode(prev => {
-      if (prev === 'calendar') {
-        // Return to music mode if media is present and playing and music mode is enabled, otherwise status
-        return (settingsMusicModeEnabled && mediaInfo.has_media && isPlaying) ? 'music' : 'status';
-      }
-      return 'calendar';
-    });
+    if (nectarMode === 'calendar') {
+      // Closing the calendar unpins and returns to music (if playing) or status.
+      setIsPinned(false);
+      setNectarMode((settingsMusicModeEnabled && mediaInfo.has_media && isPlaying) ? 'music' : 'status');
+    } else {
+      // Opening the calendar pins the notch so it gets the full panel height.
+      setIsPinned(true);
+      setNectarMode('calendar');
+    }
   };
 
   // Render a status widget by ID
@@ -1590,44 +1595,28 @@ function App() {
   // Music mode shows any time we have media info (playing or paused) and music mode setting is enabled
   const isMusicMode = mediaInfo.has_media && nectarMode === 'music' && settingsMusicModeEnabled;
 
-  // Nusa feature-merge modes (lyrics / water / shelf / todo).
-  const isNusaMode = nectarMode === 'lyrics' || nectarMode === 'water' || nectarMode === 'shelf' || nectarMode === 'todo';
-  const nusaModeWidth = () => {
-    switch (nectarMode) {
-      case 'lyrics': return 360;
-      case 'water': return 340;
-      case 'shelf': return 380;
-      case 'todo': return 360;
-      default: return 320;
-    }
-  };
-  const nusaModeHeight = () => {
-    switch (nectarMode) {
-      case 'lyrics': return 220;
-      case 'water': return 190;
-      case 'shelf': return 150;
-      case 'todo': return 230;
-      default: return 180;
-    }
-  };
+  // Notch sizing uses a 3-tier model:
+  //   standby  (!hovered)         -> compact info bar (weather · clock+date · battery)
+  //   detail   (hovered, !pinned) -> same bar plus a CPU/RAM/Disk resource strip
+  //   full     (pinned / clicked) -> fixed 440x260 panel with the tab bar at the
+  //                                  bottom, identical for every mode so nothing
+  //                                  jumps around when switching tabs.
+  const FULL_NOTCH_W = 440;
+  const FULL_NOTCH_H = 260;
 
-  // Calculate width dynamically based on enabled features
   const getDynamicWidth = () => {
-    if (isCalendarMode) return settingsCalendarEnabled && showClockColumn ? 480 : settingsCalendarEnabled ? 310 : 330;
-    if (isNusaMode && isHovered) return nusaModeWidth();
-    if (nectarMode === 'command-center' && isHovered) {
-      const totalWidgets = statusWidgets.left.length + statusWidgets.right.length;
-      return Math.max(350, Math.min(200 + totalWidgets * 65, 460));
+    if (isPinned && isHovered) return FULL_NOTCH_W;
+
+    // Detail tier: one fixed width so hovering never resizes between modes.
+    if (isHovered) {
+      if (isMusicMode) return mediaLayout === 'compact' ? 320 : 340;
+      return 380;
     }
-    if (nectarMode === 'status' && isHovered) {
-      const totalWidgets = statusWidgets.left.length + statusWidgets.right.length;
-      return Math.max(330, Math.min(200 + totalWidgets * 65, 460));
-    }
-    if (isMusicMode && isHovered) return mediaLayout === 'compact' ? 320 : 340;
+
     if ((showPowerPulse || showLowBatteryPulse || showUpdatePulse) && !isHovered) return 200;
 
-    // Idle row is now battery (left) + clock (center) + bot (right).
-    let w = isMusicMode ? 140 : 180;
+    // Standby: weather + clock+date + battery needs room so nothing overlaps.
+    let w = isMusicMode ? 140 : 252;
     if (isMusicMode) {
       if (settingsVisualizerEnabled && isPlaying) w += 30;
       if (settingsAlbumArtEnabled) w += 30;
@@ -1640,19 +1629,17 @@ function App() {
     if (!isExpanded || isHidden) {
       return isImpacted ? 28.9 : 44.2;
     }
-    // The hover tab bar takes TAB_BAR_H at the top of the expanded panel.
-    const withTabBar = (h: number) => (isHovered ? h + TAB_BAR_H : h);
-    if (nectarMode === 'calendar') return withTabBar(settingsCalendarEnabled ? (caldav.connected ? 350 : 310) : 262);
-    if (isNusaMode && isHovered) return withTabBar(nusaModeHeight());
-    if (nectarMode === 'command-center') return isHovered ? withTabBar(230) : 36;
-    if (nectarMode === 'status') return withTabBar(36);
-    if (isMusicMode && isHovered) {
-      const hasProgressBar = (mediaInfo.duration_ms ?? 0) > 0;
-      let h = mediaLayout === 'compact' ? (hasProgressBar ? 132 : 116) : 120;
-      if (mediaLayout === 'compact') {
-        if (compactVolumeExpanded) h += 36;
+    if (isPinned && isHovered) return FULL_NOTCH_H;
+    if (isHovered) {
+      if (isMusicMode) {
+        const hasProgressBar = (mediaInfo.duration_ms ?? 0) > 0;
+        let h = mediaLayout === 'compact' ? (hasProgressBar ? 132 : 116) : 120;
+        if (mediaLayout === 'compact') {
+          if (compactVolumeExpanded) h += 36;
+        }
+        return h;
       }
-      return withTabBar(h);
+      return 74; // detail tier: info row + resource strip
     }
     return 36;
   };
@@ -1715,6 +1702,12 @@ function App() {
         }}
         onClick={(e) => {
           e.stopPropagation();
+          // Clicking the notch pins it into the full panel (440x260 with the tab
+          // bar). If the current mode has no panel body (status), default to
+          // command-center so the full panel isn't empty. Works from standby too.
+          const next = !isPinned;
+          setIsPinned(next);
+          if (next && nectarMode === 'status') setNectarMode('command-center');
         }}
         onHoverStart={() => {
           setIsHovered(true);
@@ -1722,6 +1715,7 @@ function App() {
         }}
         onHoverEnd={() => {
           setIsHovered(false);
+          setIsPinned(false);
           const targetMode = mediaInfo.has_media && isPlaying && settingsMusicCompactNotch ? 'music' : 'status';
           if (nectarMode === 'music') {
             setNectarMode(targetMode);
@@ -1777,61 +1771,6 @@ function App() {
               transition={{ duration: 0.1 }}
               style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', borderRadius: 'inherit' }}
             >
-              {/* Hover tab bar: icon tabs + pager pill */}
-              <AnimatePresence>
-                {isHovered && availableModes.length > 0 && (
-                  <motion.div
-                    key="notch-tab-bar"
-                    className="notch-tab-bar"
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.18 }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="notch-tab-icons">
-                      {availableModes.map((m) => {
-                        const meta = MODE_TAB_META[m];
-                        const Icon = meta.icon;
-                        return (
-                          <button
-                            key={m}
-                            className={`notch-tab${nectarMode === m ? " active" : ""}`}
-                            title={meta.label}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              switchToMode(m);
-                            }}
-                          >
-                            <Icon size={13} strokeWidth={2} />
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="notch-pager">
-                      <button
-                        className="notch-pager-arrow"
-                        aria-label="Previous mode"
-                        onClick={(e) => { e.stopPropagation(); modeStep(-1); }}
-                      >
-                        <ChevronLeft size={11} strokeWidth={2.5} />
-                      </button>
-                      <span className="notch-pager-count">
-                        {Math.max(availableModes.indexOf(nectarMode), 0) + 1}/{availableModes.length}
-                      </span>
-                      <button
-                        className="notch-pager-arrow"
-                        aria-label="Next mode"
-                        onClick={(e) => { e.stopPropagation(); modeStep(1); }}
-                      >
-                        <ChevronRight size={11} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               {/* Faster Waiting Transition Area */}
               <AnimatePresence mode="wait">
                 {isHovered && isMusicMode && !isCalendarMode ? (
@@ -2097,21 +2036,26 @@ function App() {
                                 </motion.div>
                               ) : (!isMusicMode && !isHovered) ? (
                                 <motion.div
-                                  key="idle-battery"
-                                  className="idle-battery"
+                                  key="idle-weather"
+                                  className="idle-weather"
                                   initial={{ opacity: 0, x: -4 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: -4 }}
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <BatteryIcon charging={isCharging} level={batteryLevel} threshold={lowBatteryThreshold} />
-                                  <span className="idle-battery-pct">{batteryLevel}%</span>
+                                  {settingsWeatherEnabled && temperature !== null ? (
+                                    <>
+                                      <WeatherIcon size={13} strokeWidth={2.2} />
+                                      <span className="idle-weather-temp">{temperature}°{tempUnit === "fahrenheit" ? "F" : "C"}</span>
+                                    </>
+                                  ) : null}
                                 </motion.div>
                               ) : null}
                             </div>
 
                             {/* Center - Time (always visible) */}
                             <div className="time-center">
+                              <span className="time-date">{shortDate}</span>
                               <div className="time-flip-container" onClick={toggleCalendarMode}>
                                 <AnimatePresence initial={false}>
                                   {isCompactTimerVisible || isTimerFinished ? (
@@ -2228,14 +2172,19 @@ function App() {
                                 </motion.div>
                               ) : (!isMusicMode && !isHovered) ? (
                                 <motion.div
-                                  key="idle-bot"
-                                  className="idle-bot"
+                                  key="idle-battery"
+                                  className="idle-battery"
                                   initial={{ opacity: 0, x: 4 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: 4 }}
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <NotchBot size={20} />
+                                  {hasBattery ? (
+                                    <>
+                                      <BatteryIcon charging={isCharging} level={batteryLevel} threshold={lowBatteryThreshold} />
+                                      <span className="idle-battery-pct">{batteryLevel}%</span>
+                                    </>
+                                  ) : null}
                                 </motion.div>
                               ) : null}
                             </div>
@@ -2243,6 +2192,27 @@ function App() {
                         )}
                       </AnimatePresence>
                     </div>
+
+                    {/* Detail tier: resource strip revealed on hover (not when
+                        pinned into the full panel, and not in music mode where the
+                        media player takes the space). */}
+                    <AnimatePresence>
+                      {isHovered && !isPinned && !isMusicMode && (
+                        <motion.div
+                          key="resource-strip"
+                          className="resource-strip"
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.18 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {renderStatusWidget("cpu")}
+                          {renderStatusWidget("ram")}
+                          {renderStatusWidget("disk")}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2522,6 +2492,64 @@ function App() {
                       onToggle={(id) => todos.toggle(id)}
                       onRemove={(id) => todos.remove(id)}
                     />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Tab bar pinned to the bottom of the full panel. Only shown once
+                  the user has clicked the notch (isPinned), so hover alone stays
+                  a lightweight detail strip. */}
+              <AnimatePresence>
+                {isPinned && isHovered && availableModes.length > 0 && (
+                  <motion.div
+                    key="notch-tab-bar"
+                    className="notch-tab-bar"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.18 }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ marginTop: "auto" }}
+                  >
+                    <div className="notch-tab-icons">
+                      {availableModes.map((m) => {
+                        const meta = MODE_TAB_META[m];
+                        const Icon = meta.icon;
+                        return (
+                          <button
+                            key={m}
+                            className={`notch-tab${nectarMode === m ? " active" : ""}`}
+                            title={meta.label}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              switchToMode(m);
+                            }}
+                          >
+                            <Icon size={13} strokeWidth={2} />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="notch-pager">
+                      <button
+                        className="notch-pager-arrow"
+                        aria-label="Previous mode"
+                        onClick={(e) => { e.stopPropagation(); modeStep(-1); }}
+                      >
+                        <ChevronLeft size={11} strokeWidth={2.5} />
+                      </button>
+                      <span className="notch-pager-count">
+                        {Math.max(availableModes.indexOf(nectarMode), 0) + 1}/{availableModes.length}
+                      </span>
+                      <button
+                        className="notch-pager-arrow"
+                        aria-label="Next mode"
+                        onClick={(e) => { e.stopPropagation(); modeStep(1); }}
+                      >
+                        <ChevronRight size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
